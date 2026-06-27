@@ -91,6 +91,23 @@ uv run --locked "$KDBX" run -- npm run dev         # OPENAI_API_KEY is in the ch
 Exit codes: `0` ok · `2` not-found · `3` locked/key-file-missing · `4` confirmation-required
 (prod or `$KDBX_ENV`-inherited mutating op without `--yes`) · `5` drift · `6` vault-changed · `7` runtime.
 
+## Run `kdbx` directly (optional)
+
+The canonical invocation is `uv run --locked <SKILL_DIR>/kdbx.py <op>` (and agents should keep
+using that). For your own shell, get a short `kdbx` on PATH — pick one:
+
+```bash
+# Managed shim — survives plugin updates (resolves the skill at run time):
+uv run --locked <SKILL_DIR>/kdbx.py install-launcher        # → ~/.local/bin/kdbx (0755)
+#   --dir <path> to choose the location · --force to overwrite an existing kdbx
+
+# Or a zero-install shell function (add to ~/.zshrc):
+kdbx() { uv run --locked ~/.claude/skills/kdbx/kdbx.py "$@"; }
+```
+
+Both require `uv` on PATH. The shim is **opt-in** — kdbx never adds a binary to PATH on its own,
+and refuses to overwrite a `kdbx` file it didn't write unless you pass `--force`.
+
 ## How it works
 
 - **Discovery.** kdbx walks up from the current directory to the nearest committed

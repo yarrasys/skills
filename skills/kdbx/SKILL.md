@@ -46,9 +46,11 @@ fall back to system Python. First run provisions a Python + deps and caches them
 | `check` | verify every mapped var resolves (non-zero exit on drift) |
 | `envs` | list configured envs; mark the active one |
 | `rekey [--env E]` | rotate the keyfile |
+| `install-launcher [--dir D] [--force]` | write an opt-in `kdbx` PATH shim (default `~/.local/bin`); no vault needed |
 
 Exit codes: `0` ok · `2` not-found · `3` locked/keyfile-missing · `4` confirmation-required
-(prod or `$KDBX_ENV`-inherited mutating op without `--yes`) · `5` drift · `6` vault-changed · `7` runtime.
+(prod or `$KDBX_ENV`-inherited mutating op without `--yes`; also `install-launcher` over a
+foreign file without `--force`) · `5` drift · `6` vault-changed · `7` runtime.
 
 ## Security — do / don't (read before using)
 

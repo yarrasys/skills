@@ -1,4 +1,4 @@
-"""Operations: run / export / import / check / rekey."""
+"""Operations: run / export / import / check / rekey / install-launcher."""
 
 import argparse
 import os
@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import sys
 
-from . import context, pointer, secretio, vault
+from . import context, launcher, pointer, secretio, vault
 
 
 def _ctx(args, mutating):
@@ -104,6 +104,21 @@ def cmd_rekey(args) -> int:
     return 0
 
 
+def cmd_install_launcher(args) -> int:
+    try:
+        dest = launcher.install(args.dir, force=args.force)
+    except FileExistsError as e:
+        sys.stderr.write(f"kdbx install-launcher: {e}\n")
+        return 4
+    sys.stderr.write(f"wrote launcher {dest} (0755)\n")
+    if not launcher.on_path(dest.parent):
+        sys.stderr.write(f"NOTE: {dest.parent} is not on your PATH — add it so `kdbx` resolves.\n")
+    sys.stderr.write(
+        "Requires `uv` on PATH. Agent invocation is unchanged (uv run --locked kdbx.py).\n"
+    )
+    return 0
+
+
 def _gitignore_notice(path: pathlib.Path) -> None:
     sys.stderr.write(f"NOTE: ensure {path.name} is gitignored (it holds plaintext secrets)\n")
 
@@ -133,3 +148,9 @@ def register(sub, common) -> None:
     sp = sub.add_parser("rekey")
     common(sp)
     sp.set_defaults(fn=cmd_rekey)
+
+    # Opt-in human ergonomics: no vault/pointer needed, so no --env/--yes.
+    sp = sub.add_parser("install-launcher")
+    sp.add_argument("--dir", default="~/.local/bin")
+    sp.add_argument("--force", action="store_true")
+    sp.set_defaults(fn=cmd_install_launcher)
