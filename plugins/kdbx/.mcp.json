@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "kdbx": {
+      "command": "uv",
+      "args": ["run", "--locked", "${CLAUDE_PLUGIN_ROOT}/mcp/server.py"],
+      "env": {
+        "UV_CACHE_DIR": "${CLAUDE_PLUGIN_DATA}/uv"
+      }
+    }
+  }
+}

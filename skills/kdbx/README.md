@@ -47,6 +47,10 @@ ln -s "$PWD/skills/skills/kdbx" ~/.claude/skills/kdbx
 ```
 </details>
 
+> **Plugin (optional).** For an *enforced* secret-leak guard hook, `/kdbx:*` commands, and safe MCP
+> tools on top of this skill, install the [kdbx plugin](../../plugins/kdbx):
+> `/plugin marketplace add yarrasys/skills` then `/plugin install kdbx@yarrasys-skills`.
+
 ## Quickstart
 
 ![kdbx in action: init → set → get → run → check, with the secret never printed](docs/demo.gif)

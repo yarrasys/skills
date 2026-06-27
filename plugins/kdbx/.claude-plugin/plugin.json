@@ -1,0 +1,16 @@
+{
+  "name": "kdbx",
+  "version": "0.1.0",
+  "description": "Per-project/per-env secrets in key-file-only KeePassXC vaults — wraps the kdbx skill with an enforced secret-leak guard hook, /kdbx:* commands, and safe MCP tools.",
+  "author": {
+    "name": "Yarrasys",
+    "url": "https://github.com/yarrasys"
+  },
+  "homepage": "https://github.com/yarrasys/skills/tree/main/plugins/kdbx",
+  "license": "MIT",
+  "keywords": ["secrets", "credentials", "keepassxc", "kdbx", "security", "dotenv"],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "commands": "./commands/",
+  "mcpServers": "./.mcp.json"
+}

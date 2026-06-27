@@ -25,6 +25,18 @@ npx skills add yarrasys/skills@<name>        # add -g -y for a global, non-inter
 
 For example: `npx skills add yarrasys/skills@kdbx`.
 
+### Or install as a Claude Code plugin
+
+This repo also doubles as a [plugin marketplace](.claude-plugin/marketplace.json). Some skills
+ship a plugin wrapper that adds enforced hooks, `/`-commands, and MCP tools on top of the skill:
+
+```text
+/plugin marketplace add yarrasys/skills
+/plugin install kdbx@yarrasys-skills
+```
+
+See [`plugins/kdbx`](plugins/kdbx) for what the plugin adds over the skill.
+
 ## Available skills
 
 | Skill | Description | Docs |
@@ -34,9 +46,11 @@ For example: `npx skills add yarrasys/skills@kdbx`.
 ## Repository layout
 
 ```
-skills/<name>/         # one self-contained skill per directory (SKILL.md + bundled files)
-docs/                  # design specs and implementation plans
-.github/               # CI (multi-OS), issue/PR templates, Dependabot
+skills/<name>/          # one self-contained skill per directory (SKILL.md + bundled files)
+plugins/<name>/         # optional plugin wrapper for a skill (hooks, commands, MCP)
+.claude-plugin/         # marketplace.json — makes this repo a Claude Code plugin marketplace
+docs/                   # design specs and implementation plans
+.github/                # CI (multi-OS), issue/PR templates, Dependabot
 ```
 
 Each skill is bundled wholesale when installed, so everything it needs (scripts, references) lives

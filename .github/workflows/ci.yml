@@ -32,7 +32,8 @@ jobs:
       - name: Run tests
         run: >-
           uv run --with pytest --with pykeepass --with python-dotenv
-          --with filelock --with platformdirs python -m pytest -q
+          --with filelock --with platformdirs --with "mcp>=1.0,<2"
+          python -m pytest -q
 
   lint:
     name: lint
@@ -44,5 +45,11 @@ jobs:
         run: |
           uvx ruff check .
           uvx ruff format --check .
-      - name: Lockfile is current
-        run: uv lock --script skills/kdbx/kdbx.py --check
+      - name: Validate plugin manifests + skill symlink
+        run: |
+          python -c "import json; [json.load(open(f)) for f in ['.claude-plugin/marketplace.json', 'plugins/kdbx/.claude-plugin/plugin.json', 'plugins/kdbx/hooks/hooks.json', 'plugins/kdbx/.mcp.json']]"
+          test -f plugins/kdbx/skills/kdbx/SKILL.md
+      - name: Lockfiles are current
+        run: |
+          uv lock --script skills/kdbx/kdbx.py --check
+          uv lock --script plugins/kdbx/mcp/server.py --check
