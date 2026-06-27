@@ -76,6 +76,20 @@ def cmd_delete(args) -> int:
 def cmd_mv(args) -> int:
     c = _ctx(args, banner=True)
     vault.move(c.vault, c.keyfile, args.src, args.dst)
+    # Re-point active-env var mappings that referenced the moved entry, preserving
+    # any `:field` suffix — otherwise mv silently orphans them (check would drift).
+    src_entry, dst_entry = args.src.split(":", 1)[0], args.dst.split(":", 1)[0]
+    pt = pointer.load_pointer(c.pointer_path)
+    vars_map = pt.get("envs", {}).get(c.env, {}).get("vars", {})
+    moved = [v for v, val in vars_map.items() if val.split(":", 1)[0] == src_entry]
+    for v in moved:
+        vars_map[v] = dst_entry + vars_map[v][len(src_entry) :]
+    if moved:
+        pointer.write_pointer(c.pointer_path, pt)
+        sys.stderr.write(
+            f"re-pointed {len(moved)} var mapping(s) {src_entry} -> {dst_entry} "
+            f"in {c.pointer_path.name} — review and commit\n"
+        )
     return 0
 
 
