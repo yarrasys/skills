@@ -7,7 +7,8 @@
 [![CI](https://github.com/yarrasys/skills/actions/workflows/ci.yml/badge.svg)](https://github.com/yarrasys/skills/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![Skills CLI](https://img.shields.io/badge/install-npx%20skills-000000.svg)](https://skills.sh/)
+[![Skills CLI](https://img.shields.io/badge/install-npx%20skills-000000.svg)](https://skills.sh/yarrasys/skills)
+[![skills.sh](https://skills.sh/b/yarrasys/skills)](https://skills.sh/yarrasys/skills)
 
 </div>
 
