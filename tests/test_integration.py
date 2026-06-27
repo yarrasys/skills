@@ -63,7 +63,7 @@ def test_full_lifecycle(repo, monkeypatch, capsys):
 
     # export -> 0600 dotenv, value present in file (expected) but not in stdout
     envf = repo / ".env"
-    assert ops.dispatch(["export", "--out", str(envf), "--env", "dev", "--yes"]) == 0
+    assert ops.dispatch(["export", "--out", str(envf), "--env", "dev"]) == 0
     assert stat.S_IMODE(envf.stat().st_mode) == 0o600
     from kdbx_core import secretio
 
@@ -76,7 +76,6 @@ def test_full_lifecycle(repo, monkeypatch, capsys):
             "run",
             "--env",
             "dev",
-            "--yes",
             "--",
             sys.executable,
             "-c",
@@ -95,6 +94,7 @@ def test_full_lifecycle(repo, monkeypatch, capsys):
     kp = vault._open(_vault_path(repo), repo / "kx" / "ideas" / "dev.keyx")
     assert any(e.title == "oai" for e in kp.entries if vault._in_recyclebin(kp, e))  # in bin
 
+    monkeypatch.setattr(secretio, "confirm", lambda prompt: True)  # purge is destructive
     assert ops.dispatch(["delete", "api/oai", "--purge", "--env", "dev"]) == 0
 
     # perms stayed 0600 across all the saves above (POSIX; Windows uses ACLs)

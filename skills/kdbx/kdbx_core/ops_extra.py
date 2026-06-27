@@ -10,12 +10,11 @@ import sys
 from . import context, launcher, pointer, secretio, vault
 
 
-def _ctx(args, mutating):
+def _ctx(args, banner):
     return context.resolve(
         getattr(args, "env", None),
         pathlib.Path.cwd(),
-        yes=getattr(args, "yes", False),
-        mutating=mutating,
+        banner=banner,
     )
 
 
@@ -34,7 +33,7 @@ def resolve_vars(c, allow_missing=False) -> dict:
 
 
 def cmd_run(args) -> int:
-    c = _ctx(args, mutating=True)
+    c = _ctx(args, banner=True)
     cmd = list(args.argv)
     if cmd and cmd[0] == "--":
         cmd = cmd[1:]
@@ -48,7 +47,7 @@ def cmd_run(args) -> int:
 
 
 def cmd_export(args) -> int:
-    c = _ctx(args, mutating=True)
+    c = _ctx(args, banner=True)
     items = resolve_vars(c, args.allow_missing)
     text = secretio.render_dotenv(items)
     if args.out:
@@ -61,7 +60,7 @@ def cmd_export(args) -> int:
 
 
 def cmd_import(args) -> int:
-    c = _ctx(args, mutating=True)
+    c = _ctx(args, banner=True)
     items = secretio.parse_dotenv(pathlib.Path(args.file).read_text())
     pt = pointer.load_pointer(c.pointer_path)
     vars_map = pt["envs"].setdefault(c.env, {}).setdefault("vars", {})
@@ -79,7 +78,7 @@ def cmd_import(args) -> int:
 
 
 def cmd_check(args) -> int:
-    c = _ctx(args, mutating=False)
+    c = _ctx(args, banner=False)
     missing = []
     for var, path in c.vars.items():
         gp, title, field = pointer.parse_entry_path(path)
@@ -93,7 +92,9 @@ def cmd_check(args) -> int:
 
 
 def cmd_rekey(args) -> int:
-    c = _ctx(args, mutating=True)
+    c = _ctx(args, banner=True)
+    if not secretio.confirm(f"rotate the key file for env '{c.env}'? the old key file is deleted"):
+        return 4
     newkf = pathlib.Path(str(c.keyfile) + ".new")
     vault.rekey(c.vault, c.keyfile, newkf)
     os.replace(newkf, c.keyfile)

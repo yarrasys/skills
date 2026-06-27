@@ -27,31 +27,29 @@ This repository doubles as a plugin marketplace.
 
 ## What it adds
 
-### Leak-guard hook (`hooks/`)
+### Guard hook (`hooks/`)
 
-A `PreToolUse` hook on `Bash` that **denies** any command which would read or
-print a KeePassXC vault or key file through a tool other than `kdbx` itself.
+A `PreToolUse` hook on `Bash` that **enforces the agent/human boundary**, denying two classes of
+*agent-issued* command (it fires only for model tool calls — your own `!`-prefixed commands pass
+through untouched, so you can write in the same window):
 
-| Denied | Allowed |
-|--------|---------|
-| `cat dev.keyx` | `kdbx run -- npm run dev` |
-| `base64 ~/.config/keepassxc/p/dev.keyx` | `kdbx get api/openai` (masked) |
-| `cp vault.kdbx /tmp` | `keepassxc-cli show …` |
-| `echo $(cat prod.kdbx)` | `cat README.md`, `npm run dev` |
+| Denied (agent) | Why | Allowed (agent) |
+|----------------|-----|-----------------|
+| `kdbx set …`, `kdbx delete …`, `kdbx mv …`, `kdbx import …`, `kdbx rekey` | vault writes are a human role | `kdbx run -- …`, `kdbx get api/x` (masked) |
+| `kdbx get … --reveal`/`--clip`, `kdbx export …` | expose a secret value | `kdbx list` / `check` / `envs` / `init` |
+| `cat dev.keyx`, `base64 …/dev.keyx`, `cp vault.kdbx /tmp` | read a vault/key file directly | `keepassxc-cli show …`, `cat README.md` |
 
 Design notes:
-- **Precise, not broad.** It targets `*.kdbx` / `*.keyx` files and paths under a
-  KeePassXC config dir (`$KEEPASSXC_DIR`, `~/.config/keepassxc`,
-  `%LOCALAPPDATA%\keepassxc`). It **does not** block `.env` reads — `.env` is
-  ubiquitous and legitimately read, and kdbx's whole premise is that secrets
-  shouldn't live there.
-- **Fails open.** Any parse error, ambiguity, or missing `python3` allows the
-  command — a guard must never brick your shell.
-- **Allowlists** `kdbx`, `kdbx.py`, `keepassxc-cli`, `keepassxc`, and
-  `uv`/`uvx` running `kdbx`.
+- **Two checks.** A *role-guard* (writes/value-exposure via `kdbx` are human-only) and a *leak-guard*
+  (reading a `*.kdbx`/`*.keyx` file or a KeePassXC config-dir path via a non-`kdbx` tool).
+- **Precise, not broad.** It does **not** block `.env` reads — `.env` is ubiquitous and legitimately
+  read, and kdbx's premise is that secrets shouldn't live there.
+- **Fails open.** Any parse error, ambiguity, or missing `python3` allows the command — a guard must
+  never brick your shell.
+- For a blocked write, the agent **emits the command for you to run** (`!kdbx set …` or your terminal).
 
-Disable it by removing `hooks/hooks.json` (or uninstall the plugin) and keep
-using the standalone skill.
+Disable it by removing `hooks/hooks.json` (or uninstall the plugin) and keep using the standalone
+skill — which then states the boundary as a contract rather than enforcing it.
 
 ### MCP server (`mcp/server.py`)
 

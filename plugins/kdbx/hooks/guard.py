@@ -30,6 +30,11 @@ _SECRET_RE = re.compile(r"\.(kdbx|keyx)\b", re.IGNORECASE)
 # Shell operators separating independent command segments.
 _SEG_SPLIT = re.compile(r"\|\||&&|[;|\n]")
 
+# kdbx subcommands the agent must NOT run — writes are a human role (vault
+# mutation) and these expose values. Reads/use (run, get-masked, list, check,
+# envs, init, install-launcher) stay allowed.
+_BLOCKED_OPS = {"set", "delete", "mv", "import", "rekey", "export"}
+
 
 def _keepassxc_dir_fragments():
     """Lowercased, forward-slashed path fragments that mark the KeePassXC config
@@ -56,32 +61,73 @@ def _program(tokens):
     return ""
 
 
+def _kdbx_op(tokens):
+    """If a segment invokes the kdbx CLI (as the program, or via `uv run`), return
+    its subcommand string; else None. The program check avoids false positives like
+    `echo kdbx set ...`."""
+    if not tokens:
+        return None
+    prog = _program(tokens)
+    for i, tok in enumerate(tokens):
+        if os.path.basename(tok) in ("kdbx", "kdbx.py"):
+            if os.path.basename(tok) == prog or prog in ("uv", "uvx"):
+                for nxt in tokens[i + 1 :]:
+                    if not nxt.startswith("-"):
+                        return nxt
+                return ""
+            return None
+    return None
+
+
+def _blocked_kdbx_op(tokens):
+    """Return the offending op if this is an agent-issued write/expose kdbx call."""
+    op = _kdbx_op(tokens)
+    if op is None:
+        return None
+    if op in _BLOCKED_OPS:
+        return op
+    if op == "get" and ("--reveal" in tokens or "--clip" in tokens):
+        return "get --reveal/--clip"
+    return None
+
+
 def decide(command):
-    """Return a human-readable deny reason if `command` would read/print a
-    KeePassXC vault or keyfile via a non-kdbx tool, else None (allow)."""
+    """Return a human-readable deny reason if `command` (a) issues an agent
+    write/expose kdbx op, or (b) reads a KeePassXC vault/keyfile via a non-kdbx
+    tool; else None (allow)."""
     if not command or not command.strip():
         return None
     for raw_seg in _SEG_SPLIT.split(command):
         seg = raw_seg.strip()
         if not seg:
             continue
+        try:
+            tokens = shlex.split(seg)
+        except ValueError:
+            tokens = seg.split()
+
+        # (a) writes / value-exposure are a human role — the agent must not run them.
+        op = _blocked_kdbx_op(tokens)
+        if op:
+            return (
+                "kdbx role-guard: '%s' is a human-only operation (it mutates the vault "
+                "or exposes a secret value). Don't run it as the agent — give the command "
+                "to the human to run in their own terminal (or via `!kdbx ...`)." % op
+            )
+
+        # (b) the agent must not read a vault/keyfile via a non-kdbx tool.
         norm = seg.replace("\\", "/")
         m = _SECRET_RE.search(norm)
         frag = next((f for f in _keepassxc_dir_fragments() if f in norm.lower()), None)
         if not m and not frag:
             continue
-        try:
-            tokens = shlex.split(seg)
-        except ValueError:
-            tokens = seg.split()
         prog = _program(tokens) if tokens else ""
         allowed = prog in _ALLOW or (prog in {"uv", "uvx"} and "kdbx" in seg.lower())
         if not allowed:
             hint = m.group(0) if m else "a KeePassXC config path"
             return (
                 "kdbx leak-guard: '%s' would read a KeePassXC vault/keyfile (%s). "
-                "Use `kdbx run -- ...` to inject secrets without printing them, or "
-                "`kdbx get --reveal` only if a human explicitly needs the value."
+                "Use `kdbx run -- ...` to inject secrets without printing them."
                 % (prog or "command", hint)
             )
     return None

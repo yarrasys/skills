@@ -39,7 +39,6 @@ def test_run_injects_env(repo_with_secret, tmp_path):
             "run",
             "--env",
             "dev",
-            "--yes",
             "--",
             sys.executable,
             "-c",
@@ -50,9 +49,7 @@ def test_run_injects_env(repo_with_secret, tmp_path):
 
 
 def test_run_propagates_exit(repo_with_secret):
-    rc = ops.dispatch(
-        ["run", "--env", "dev", "--yes", "--", sys.executable, "-c", "import sys;sys.exit(7)"]
-    )
+    rc = ops.dispatch(["run", "--env", "dev", "--", sys.executable, "-c", "import sys;sys.exit(7)"])
     assert rc == 7
 
 
@@ -83,7 +80,7 @@ def test_export_roundtrip_multiline(tmp_path, monkeypatch):
     _stdin(monkeypatch, pem)
     ops.dispatch(["set", "k/pem", "--raw", "--env", "dev"])
     out = tmp_path / ".env"
-    assert ops.dispatch(["export", "--out", str(out), "--env", "dev", "--yes"]) == 0
+    assert ops.dispatch(["export", "--out", str(out), "--env", "dev"]) == 0
     from kdbx_core import secretio
 
     back = secretio.parse_dotenv(out.read_text())

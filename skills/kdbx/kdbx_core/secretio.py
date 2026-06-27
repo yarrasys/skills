@@ -39,6 +39,18 @@ def read_secret(args) -> str:
     return val
 
 
+def confirm(prompt: str) -> bool:
+    """Interactive y/N for an irreversible op. Refuses (returns False) when stdin
+    is not a TTY — there is no non-interactive override (writes are a human role)."""
+    if not sys.stdin.isatty():
+        sys.stderr.write(f"{prompt}: refused — needs an interactive terminal to confirm\n")
+        return False
+    try:
+        return input(f"{prompt} [y/N] ").strip().lower() in ("y", "yes")
+    except EOFError:
+        return False
+
+
 def restrict_perms(path) -> None:
     """0600 on POSIX; inheritance-stripped owner-only ACL on Windows."""
     path = str(path)

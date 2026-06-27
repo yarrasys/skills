@@ -48,22 +48,35 @@ fall back to system Python. First run provisions a Python + deps and caches them
 | `rekey [--env E]` | rotate the keyfile |
 | `install-launcher [--dir D] [--force]` | write an opt-in `kdbx` PATH shim (default `~/.local/bin`); no vault needed |
 
-Exit codes: `0` ok · `2` not-found · `3` locked/keyfile-missing · `4` confirmation-required
-(prod or `$KDBX_ENV`-inherited mutating op without `--yes`; also `install-launcher` over a
-foreign file without `--force`) · `5` drift · `6` vault-changed · `7` runtime.
+Exit codes: `0` ok · `2` not-found · `3` locked/keyfile-missing · `4` destructive op not confirmed
+(`delete --purge` / `rekey` without an interactive `y`; also `install-launcher` over a foreign file
+without `--force`) · `5` drift · `6` vault-changed · `7` runtime.
+
+## Roles — who runs what
+
+🔑 **The agent reads and uses secrets; the human performs writes.**
+
+- **Agent (you, in this session):** `run`, `get` (masked), `list`, `check`, `envs`, `init`.
+  For anything that mutates the vault (`set` / `delete` / `mv` / `import` / `rekey`) or exposes a
+  value (`get --reveal` / `--clip`, `export`), **emit the exact command for the human** to run in
+  their own terminal (or via `!kdbx …` in this prompt) — do not run it yourself.
+- **Human:** runs those write/expose commands; irreversible ones (`delete --purge`, `rekey`) ask
+  for an interactive `y/N`.
+- The kdbx **plugin enforces** this with a `PreToolUse` hook (your write commands are blocked; the
+  human's `!` commands pass through untouched). The bare skill states it as a contract.
+- The real **prod** boundary is **key-file possession**, not a name match — you can only reach an
+  env's secrets if its key file exists on this machine.
 
 ## Security — do / don't (read before using)
 
 - 🔑 **Never author or observe a secret value.** Your job is the entry **PATH / var-name only**.
-  To store a value, have the **human** run `set` and pipe the secret on **their** terminal
-  (`kdbx set api/openai < secret.txt`, or type it at the `getpass` prompt). In CI, an outer
-  orchestrator sets an env var and you pass `--from-env VAR`.
+  To store a value, the **human** runs `set` and pipes the secret on their terminal
+  (`kdbx set api/openai < secret.txt`, or types it at the `getpass` prompt).
 - ❌ **Never** do `echo SECRET | kdbx set …` or `export SECRET=…; kdbx set --from-env SECRET`
   inside this session — that puts the plaintext in the transcript. Both are forbidden.
-- Prefer `kdbx run -- <cmd>` (inject, never print) over `export`/`get --reveal`. Use `--reveal`
-  only when a human explicitly asks, and warn about scrollback/CI logs.
+- Prefer `kdbx run -- <cmd>` (inject, never print) over `export`/`get --reveal`.
 - The **keyfile is the sole secret**; losing it makes the vault unrecoverable. Back it up
-  out-of-band. Mutating `prod` (or an env inherited from `$KDBX_ENV`) requires `--yes`.
+  out-of-band.
 
 ## References
 

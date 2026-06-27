@@ -7,17 +7,16 @@ import sys
 from . import __version__, context, ops_extra, pointer, secretio, vault
 
 
-def _ctx(args, mutating):
+def _ctx(args, banner):
     return context.resolve(
         getattr(args, "env", None),
         pathlib.Path.cwd(),
-        yes=getattr(args, "yes", False),
-        mutating=mutating,
+        banner=banner,
     )
 
 
 def cmd_init(args) -> int:
-    c = _ctx(args, mutating=True)
+    c = _ctx(args, banner=True)
     vault.create_vault(c.vault, c.keyfile)
     sys.stderr.write(
         f"created {c.vault}\n"
@@ -27,7 +26,7 @@ def cmd_init(args) -> int:
 
 
 def cmd_set(args) -> int:
-    c = _ctx(args, mutating=True)
+    c = _ctx(args, banner=True)
     gp, title, field = pointer.parse_entry_path(args.path)
     value = secretio.read_secret(args)
     vault.set_field(c.vault, c.keyfile, gp, title, field, value)
@@ -40,7 +39,7 @@ def cmd_set(args) -> int:
 
 
 def cmd_get(args) -> int:
-    c = _ctx(args, mutating=False)
+    c = _ctx(args, banner=False)
     gp, title, field = pointer.parse_entry_path(args.path)
     val = vault.get_field(c.vault, c.keyfile, gp, title, field)
     if args.clip:
@@ -55,7 +54,7 @@ def cmd_get(args) -> int:
 
 
 def cmd_list(args) -> int:
-    c = _ctx(args, mutating=False)
+    c = _ctx(args, banner=False)
     for path in vault.list_entries(c.vault, c.keyfile):
         if args.group and not path.startswith(args.group):
             continue
@@ -64,14 +63,18 @@ def cmd_list(args) -> int:
 
 
 def cmd_delete(args) -> int:
-    c = _ctx(args, mutating=True)
+    c = _ctx(args, banner=True)
     gp, title, _ = pointer.parse_entry_path(args.path)
+    if args.purge and not secretio.confirm(
+        f"permanently purge '{args.path}'? this cannot be undone"
+    ):
+        return 4
     (vault.purge if args.purge else vault.trash)(c.vault, c.keyfile, gp, title)
     return 0
 
 
 def cmd_mv(args) -> int:
-    c = _ctx(args, mutating=True)
+    c = _ctx(args, banner=True)
     vault.move(c.vault, c.keyfile, args.src, args.dst)
     return 0
 
@@ -91,7 +94,6 @@ def cmd_envs(args) -> int:
 
 def _common(sp) -> None:
     sp.add_argument("--env")
-    sp.add_argument("--yes", action="store_true")
 
 
 def _build_parser() -> argparse.ArgumentParser:

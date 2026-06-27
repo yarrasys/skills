@@ -88,8 +88,14 @@ uv run --locked "$KDBX" run -- npm run dev         # OPENAI_API_KEY is in the ch
 | `envs` | list configured envs; mark the active one |
 | `rekey [--env E]` | rotate the key file |
 
-Exit codes: `0` ok · `2` not-found · `3` locked/key-file-missing · `4` confirmation-required
-(prod or `$KDBX_ENV`-inherited mutating op without `--yes`) · `5` drift · `6` vault-changed · `7` runtime.
+Exit codes: `0` ok · `2` not-found · `3` locked/key-file-missing · `4` destructive op not confirmed
+(`delete --purge` / `rekey` without an interactive `y`) · `5` drift · `6` vault-changed · `7` runtime.
+
+> **Roles.** The agent reads/uses secrets (`run`/`get`/`list`/`check`/`envs`/`init`); writes
+> (`set`/`delete`/`mv`/`import`/`rekey`) and value-exposure (`get --reveal`/`--clip`, `export`) are
+> a human role — the agent emits the command for you to run. The [plugin](../../plugins/kdbx)
+> *enforces* this; the bare skill states it as a contract. The real prod boundary is key-file
+> possession, not a name.
 
 ## Run `kdbx` directly (optional)
 

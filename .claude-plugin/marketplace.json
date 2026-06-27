@@ -12,8 +12,8 @@
     {
       "name": "kdbx",
       "source": "./plugins/kdbx",
-      "description": "KeePassXC credentials manager: per-project/per-env secrets in key-file-only .kdbx vaults, with an enforced PreToolUse leak-guard hook and safe MCP tools.",
-      "version": "0.1.0"
+      "description": "KeePassXC credentials manager: per-project/per-env secrets in key-file-only .kdbx vaults, with an enforced agent/human role-guard hook and safe MCP tools.",
+      "version": "0.2.0"
     }
   ]
 }

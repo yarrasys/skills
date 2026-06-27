@@ -31,12 +31,37 @@ ALLOW = [
     "uv run --locked kdbx.py get api/openai",
     "uv run skills/kdbx/kdbx.py run -- npm run dev",
     "keepassxc-cli show vault.kdbx entry",  # kdbx's own engine
-    "kdbx set api/openai < secret.txt",
     "cat README.md",
     "npm run dev",
     "ls ~/.config/keepassxc",  # listing the dir, not reading a file
     "grep TODO src/app.py",
     "",  # empty
+]
+
+# Role-guard: writes / value-exposure are a human role — the agent must not run them.
+ROLE_DENY = [
+    "uv run --locked /p/kdbx.py set api/openai",
+    "kdbx set api/openai < secret.txt",
+    "kdbx delete api/x --purge",
+    "kdbx mv a b",
+    "kdbx import .env",
+    "kdbx rekey",
+    "kdbx export --out .env",
+    "uv run kdbx.py export",
+    "kdbx get api/x --reveal",
+    "kdbx get api/x --clip",
+]
+
+ROLE_ALLOW = [
+    "kdbx run -- npm run dev",
+    "uv run --locked skills/kdbx/kdbx.py run -- ./deploy.sh",
+    "kdbx get api/openai",  # masked
+    "kdbx list",
+    "kdbx check",
+    "kdbx envs",
+    "kdbx init",  # creates a vault, authors no value (#9: agent may init)
+    "kdbx install-launcher",
+    "echo kdbx set is a human-only op",  # not an invocation -> not flagged
 ]
 
 
@@ -48,6 +73,17 @@ def test_denies_leaks(cmd):
 
 @pytest.mark.parametrize("cmd", ALLOW)
 def test_allows_safe(cmd):
+    assert guard.decide(cmd) is None, f"expected allow for: {cmd!r}"
+
+
+@pytest.mark.parametrize("cmd", ROLE_DENY)
+def test_role_guard_blocks_agent_writes(cmd):
+    reason = guard.decide(cmd)
+    assert reason and "role-guard" in reason, f"expected role-guard deny for: {cmd!r}"
+
+
+@pytest.mark.parametrize("cmd", ROLE_ALLOW)
+def test_role_guard_allows_reads(cmd):
     assert guard.decide(cmd) is None, f"expected allow for: {cmd!r}"
 
 
