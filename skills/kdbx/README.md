@@ -103,7 +103,7 @@ The canonical invocation is `uv run --locked <SKILL_DIR>/kdbx.py <op>` (and agen
 using that). For your own shell, get a short `kdbx` on PATH — pick one:
 
 ```bash
-# Managed shim — survives plugin updates (resolves the skill at run time):
+# Managed shim — at run time picks the NEWEST kdbx across install channels:
 uv run --locked <SKILL_DIR>/kdbx.py install-launcher        # → ~/.local/bin/kdbx (0755)
 #   --dir <path> to choose the location · --force to overwrite an existing kdbx
 
@@ -112,7 +112,11 @@ kdbx() { uv run --locked ~/.claude/skills/kdbx/kdbx.py "$@"; }
 ```
 
 Both require `uv` on PATH. The shim is **opt-in** — kdbx never adds a binary to PATH on its own,
-and refuses to overwrite a `kdbx` file it didn't write unless you pass `--force`.
+and refuses to overwrite a `kdbx` file it didn't write unless you pass `--force`. It resolves the
+**highest-versioned** install at run time across both the Skills-CLI copy (`npx skills add`) and
+the plugin cache (`/plugin update`), so an update from either channel wins — a stale copy in the
+other never shadows it. The shim's own logic is baked in at install time; after upgrading kdbx
+itself, re-run `install-launcher --force` to refresh it.
 
 ## How it works
 

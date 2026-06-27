@@ -4,9 +4,11 @@ Agent/CLI invocation stays `uv run --locked .../kdbx.py <op>`. This is purely a
 human ergonomics affordance, written only on an explicit `kdbx install-launcher`
 so a credential tool never adds a binary to PATH on its own.
 
-The shim resolves the skill at *run* time (preferring the stable Skills-CLI
-install, falling back to the newest versioned plugin-cache copy), so it survives
-plugin updates without being rewritten.
+The shim resolves the skill at *run* time and picks the **newest version** across
+*all* install channels — the Skills-CLI install (`~/.claude/skills/kdbx`, updated by
+`npx skills add`) and every plugin-cache copy (updated by `/plugin update`). Picking
+by version, not location, means an update from either channel takes effect and a
+stale copy in the other channel can never silently shadow it (issue #14).
 """
 
 import os
@@ -16,18 +18,28 @@ MARKER = "# kdbx-managed-launcher"
 
 SHIM = f"""\
 #!/bin/sh
-# kdbx launcher — managed by `kdbx install-launcher`. Resolves the skill at run
-# time so it survives plugin updates. Regenerate with `kdbx install-launcher --force`.
+# kdbx launcher — managed by `kdbx install-launcher`. Resolves the NEWEST installed
+# kdbx at run time across the Skills-CLI install and all plugin-cache copies, so an
+# update from either channel wins. Regenerate with `kdbx install-launcher --force`.
 {MARKER}
 set -e
 
-py=""
-if [ -f "$HOME/.claude/skills/kdbx/kdbx.py" ]; then
-    py="$HOME/.claude/skills/kdbx/kdbx.py"               # 1) stable Skills-CLI install
-else                                                     # 2) newest plugin-cache copy
-    py=$(ls -d "$HOME"/.claude/plugins/cache/*/kdbx/*/skills/kdbx/kdbx.py 2>/dev/null \\
-         | sort -V | tail -n 1)
-fi
+# Pick the highest-versioned kdbx.py among every install channel. Each candidate's
+# version is read from its sibling kdbx_core/__init__.py (works for both layouts).
+best_ver=""; py=""; first=""
+for cand in "$HOME/.claude/skills/kdbx/kdbx.py" \\
+            "$HOME"/.claude/plugins/cache/*/kdbx/*/skills/kdbx/kdbx.py; do
+    [ -f "$cand" ] || continue
+    [ -z "$first" ] && first="$cand"
+    ver=$(grep __version__ "$(dirname "$cand")/kdbx_core/__init__.py" 2>/dev/null \\
+          | head -n 1 | tr -dc '0-9.')
+    [ -n "$ver" ] || continue
+    if [ -z "$best_ver" ] || \\
+       [ "$(printf '%s\\n%s\\n' "$best_ver" "$ver" | sort -V | tail -n 1)" = "$ver" ]; then
+        best_ver="$ver"; py="$cand"
+    fi
+done
+[ -z "$py" ] && py="$first"   # fallback: a runnable copy we just could not version
 
 if [ -z "$py" ] || [ ! -f "$py" ]; then
     echo "kdbx: could not locate kdbx.py. Install the skill with:" >&2

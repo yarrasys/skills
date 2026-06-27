@@ -1,6 +1,6 @@
 {
   "name": "kdbx",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Per-project/per-env secrets in key-file-only KeePassXC vaults — wraps the kdbx skill with an enforced secret-leak guard hook, /kdbx:* commands, and safe MCP tools.",
   "author": {
     "name": "Yarrasys",

@@ -75,11 +75,38 @@ def _run_shim(shim, home, bindir, *args):
     return subprocess.run(["sh", str(shim), *args], capture_output=True, text=True, env=env)
 
 
-def test_shim_prefers_stable_skill_path(tmp_path):
+def _mk_install(d, version):
+    """A stub kdbx install: kdbx.py + a sibling kdbx_core/__init__.py with `version`
+    (the shim reads the version from there to pick the newest across channels)."""
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "kdbx.py").write_text("# stub")
+    core = d / "kdbx_core"
+    core.mkdir(exist_ok=True)
+    (core / "__init__.py").write_text(f'__version__ = "{version}"\n')
+    return d / "kdbx.py"
+
+
+def _standalone(home):
+    return home / ".claude" / "skills" / "kdbx"
+
+
+def _cache(home, version):
+    return (
+        home
+        / ".claude"
+        / "plugins"
+        / "cache"
+        / "yarrasys-skills"
+        / "kdbx"
+        / version
+        / "skills"
+        / "kdbx"
+    )
+
+
+def test_shim_uses_the_only_install(tmp_path):
     home = tmp_path / "home"
-    skill = home / ".claude" / "skills" / "kdbx"
-    skill.mkdir(parents=True)
-    (skill / "kdbx.py").write_text("# stub")
+    py = _mk_install(_standalone(home), "0.2.0")
     bindir = tmp_path / "bin"
     bindir.mkdir()
     _stub_uv(bindir)
@@ -87,16 +114,13 @@ def test_shim_prefers_stable_skill_path(tmp_path):
 
     p = _run_shim(shim, home, bindir, "check")
     assert p.returncode == 0
-    assert f"UV run --locked {skill / 'kdbx.py'} check" in p.stdout
+    assert f"UV run --locked {py} check" in p.stdout
 
 
-def test_shim_falls_back_to_newest_plugin_cache(tmp_path):
+def test_shim_picks_newest_plugin_cache(tmp_path):
     home = tmp_path / "home"
-    base = home / ".claude" / "plugins" / "cache" / "yarrasys-skills" / "kdbx"
-    for ver in ("0.1.0", "0.2.0"):
-        d = base / ver / "skills" / "kdbx"
-        d.mkdir(parents=True)
-        (d / "kdbx.py").write_text("# stub")
+    _mk_install(_cache(home, "0.1.0"), "0.1.0")
+    newest = _mk_install(_cache(home, "0.2.0"), "0.2.0")
     bindir = tmp_path / "bin"
     bindir.mkdir()
     _stub_uv(bindir)
@@ -104,7 +128,24 @@ def test_shim_falls_back_to_newest_plugin_cache(tmp_path):
 
     p = _run_shim(shim, home, bindir, "envs")
     assert p.returncode == 0
-    assert "0.2.0" in p.stdout and "0.1.0" not in p.stdout  # newest wins
+    assert str(newest) in p.stdout
+
+
+def test_shim_resolves_newest_across_channels(tmp_path):
+    # #14: standalone is STALE (0.1.0), plugin-cache is newer (0.2.0) — the cache copy
+    # must win so a `/plugin update` is never silently shadowed by the old standalone.
+    home = tmp_path / "home"
+    _mk_install(_standalone(home), "0.1.0")
+    newest = _mk_install(_cache(home, "0.2.0"), "0.2.0")
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    _stub_uv(bindir)
+    shim = launcher.install(tmp_path / "shimdir")
+
+    p = _run_shim(shim, home, bindir, "run")
+    assert p.returncode == 0
+    assert str(newest) in p.stdout
+    assert f"{_standalone(home) / 'kdbx.py'} run" not in p.stdout  # stale standalone NOT used
 
 
 def test_shim_errors_helpfully_when_missing(tmp_path):
