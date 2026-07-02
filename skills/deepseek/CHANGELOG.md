@@ -16,6 +16,10 @@ Releases are tagged `deepseek/v<version>`.
 
 ### Fixed
 
+- **Windows child spawn:** `run_child` now resolves `claude` via `shutil.which` (honoring
+  `PATHEXT`) before spawning, so the Windows `.bat`/`.cmd` shim launches. Previously a bare
+  `claude` argv[0] with `shell=False` failed with `WinError 2` on Windows — the delegate
+  integration tests were red on `windows-latest` and real Windows delegations would have failed too.
 - `--verify ""` now actually disables verification instead of silently falling back to
   `verifyDefault` (the empty string was previously treated as falsy).
 - **Shell-injection guardrail:** `_run_verify` now `shlex.quote`s each filename interpolated

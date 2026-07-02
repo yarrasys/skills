@@ -2,6 +2,7 @@
 
 import json
 import pathlib
+import shutil
 import subprocess
 from collections.abc import Mapping
 
@@ -56,6 +57,12 @@ def write_child_settings(dir_: pathlib.Path, model: str) -> pathlib.Path:
 
 
 def run_child(argv, env, cwd, timeout: int) -> dict:
+    # Resolve argv[0] to a full path via PATH/PATHEXT before spawning. On Windows the
+    # `claude` CLI is a `.bat`/`.cmd` shim; a bare `claude` with shell=False can't be
+    # launched (CreateProcess won't resolve the extension) — shutil.which finds the
+    # shim and the full path spawns correctly. `path=` uses the child's own PATH.
+    resolved = shutil.which(argv[0], path=env.get("PATH")) or argv[0]
+    argv = [resolved, *argv[1:]]
     try:
         proc = subprocess.run(
             argv,
