@@ -70,6 +70,8 @@ added **only when `status == "patch_ready"`** — every other status omits it en
 |----------|------|----------------------------|
 | `patch_ready` | 0 | Success, isolated. Receipt includes `patch` (a path under `.deepseek/`). Review it, then `deepseek apply <patch>` to land it. |
 | `applied` | 0 | Success, `--in-place`. No `patch` key — the change is already in the working tree, review with `git diff`. |
+| `no_changes` | 0 | The child ran but made **no file changes** — a genuine no-op. No `patch` key (an empty patch wouldn't apply); nothing to review. |
+| `isolation_breach` | 7 | 🔑 The child escaped its worktree and wrote into the **main working tree**; nothing was applied. `receipt.files` lists the intruded paths — inspect with `git status` and revert as needed. |
 | `verify_failed` | 5 | The child's edit failed `verify` (default `ruff check {file}`, or `--verify`/`verifyDefault`). No `patch` key; nothing was applied; `receipt.verify.tail` has the last lines of output. |
 | `budget_exceeded` | 6 | Child-reported cost exceeded `auto.maxCostUsdPerRun`. No `patch` key; nothing applied. |
 | `denied` | 6 | The change touched a path matching `auto.denyGlobs`. No `patch` key; nothing applied; `receipt.files` shows what changed. |
@@ -94,7 +96,11 @@ its own settings — this is what stops a delegated `claude` from delegating aga
 - `auto.maxCostUsdPerSession` is **parsed but not enforced** — only `maxCostUsdPerRun` is checked
   per delegation. There's no session-level cost ledger yet; don't rely on the session cap.
 - `cost.reported_usd` is child-reported and **Anthropic-priced** (the `claude` CLI's own cost
-  accounting), not recomputed against DeepSeek's actual pricing — treat it as approximate.
+  accounting) by default, which overstates DeepSeek spend — treat it as approximate. To price runs
+  at DeepSeek's real rates, set `deepseekPricing` (`{"inputPerMTok": …, "outputPerMTok": …}`) in
+  `.deepseek.json`; then `cost` is computed from the child's token usage and the note reads
+  "DeepSeek-priced". The default `maxCostUsdPerRun` cap is calibrated for the Anthropic-priced unit
+  (so it fails conservative); lower it once you've configured `deepseekPricing`.
 - `check` is fully offline: it confirms the key/binaries are *present*, not that the DeepSeek
   endpoint is reachable or the key is valid. That's only verified on the first real `delegate`.
 
@@ -113,6 +119,10 @@ The delegated child runs with `Bash` in `ALLOWED_TOOLS` and `--permission-mode a
 **git-tracked file diffs** — it does **not** sandbox the child's process. From inside the
 worktree the child can still run arbitrary shell commands, write to absolute paths outside the
 worktree, read/exfiltrate repo contents over the network, or otherwise act outside git's view.
+The worktree is created **outside** the repo tree, and `delegate` compares the main tree's status
+before/after the run: a child that writes into the real working tree despite isolation is caught
+and reported as `isolation_breach` (nothing applied). That is **detection after the fact**, not a
+sandbox — it catches accidental escapes, not a determined adversary.
 Only delegate to a DeepSeek endpoint/key you trust with shell access. `--in-place` skips even
 that file-diff isolation and lets the child's edits land straight on your real tree (rolled back
 automatically if a gate withholds — see the receipt table above), so treat it as running

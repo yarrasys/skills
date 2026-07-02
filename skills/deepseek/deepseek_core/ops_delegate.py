@@ -15,7 +15,7 @@ from . import config, guardrails, receipt, runner, workspace
 MAX_TURNS = 8
 TIMEOUT_S = 900
 ALLOWED_TOOLS = ["Read", "Edit", "Write", "Bash"]
-COST_NOTE = "child-reported, Anthropic-priced — approximate"
+COST_NOTE = receipt.ANTHROPIC_COST_NOTE
 
 
 def _emit(rc_dict: dict) -> None:
@@ -75,6 +75,9 @@ def cmd_delegate(args) -> int:
             settings_path=str(settings),
             max_turns=MAX_TURNS,
         )
+        # Snapshot the main tree so we can detect a child that escapes isolation and
+        # writes into the real repo instead of its worktree (#26).
+        main_before = workspace.status_set(repo) if isolate else set()
         env = runner.build_child_env(os.environ, key)
         child = runner.run_child(argv, env, workdir, TIMEOUT_S)
 
@@ -94,7 +97,8 @@ def cmd_delegate(args) -> int:
             return 7
 
         result = child["result"]
-        cost = {"reported_usd": result.get("total_cost_usd"), "note": COST_NOTE}
+        usd, cost_note = receipt.compute_cost(result, cfg.get("deepseekPricing"))
+        cost = {"reported_usd": usd, "note": cost_note}
         turns = result.get("num_turns", 0)
 
         if result.get("is_error"):
@@ -112,8 +116,48 @@ def cmd_delegate(args) -> int:
             sys.stderr.write("deepseek: child reported is_error — no verify/apply run\n")
             return 7
 
+        ws_label = "worktree" if isolate else "in_place"
+
+        # #26: a child that wrote into the main tree escaped its worktree — refuse to
+        # treat that as a normal result. Nothing is applied; surface it for inspection.
+        if isolate:
+            intruded = workspace.status_set(repo) - main_before
+            if intruded:
+                _emit(
+                    receipt.build_receipt(
+                        status="isolation_breach",
+                        workspace="worktree",
+                        files=[{"path": ln[3:].strip()} for ln in sorted(intruded)],
+                        verify=None,
+                        patch=None,
+                        cost=cost,
+                        turns=turns,
+                    )
+                )
+                sys.stderr.write(
+                    "deepseek: isolation breach — the child wrote into the main tree "
+                    "outside its worktree; nothing applied. Inspect with: git status\n"
+                )
+                return 7
+
         files = workspace.numstat(workdir)
         changed = [f["path"] for f in files]
+
+        # #26: nothing changed in the workspace — a genuine no-op. Report it as its own
+        # status; an empty patch would not apply, and "applied"/"patch_ready" would lie.
+        if not files:
+            _emit(
+                receipt.build_receipt(
+                    status="no_changes",
+                    workspace=ws_label,
+                    files=[],
+                    verify=None,
+                    patch=None,
+                    cost=cost,
+                    turns=turns,
+                )
+            )
+            return 0
 
         verify = _run_verify(verify_cmd, workdir, changed)
 
@@ -122,8 +166,6 @@ def cmd_delegate(args) -> int:
         over_budget = not guardrails.within_budget(
             cost["reported_usd"], cfg["auto"]["maxCostUsdPerRun"]
         )
-
-        ws_label = "worktree" if isolate else "in_place"
 
         if verify and not verify["passed"]:
             _emit(

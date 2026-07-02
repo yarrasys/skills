@@ -1,7 +1,11 @@
 """Git worktree lifecycle + diff/patch helpers (all git side-effects live here)."""
 
 import pathlib
+import shutil
 import subprocess
+import tempfile
+
+_WT_PREFIX = "deepseek-wt-"
 
 
 def _git(repo: pathlib.Path, *args: str) -> str:
@@ -12,6 +16,12 @@ def _git(repo: pathlib.Path, *args: str) -> str:
 
 def is_dirty(repo: pathlib.Path) -> bool:
     return bool(_git(repo, "status", "--porcelain").strip())
+
+
+def status_set(repo: pathlib.Path) -> set:
+    """Working-tree status as a set of porcelain lines — used to detect changes a
+    delegated child made to the *main* tree despite worktree isolation (#26)."""
+    return {ln for ln in _git(repo, "status", "--porcelain").splitlines() if ln.strip()}
 
 
 def numstat(repo: pathlib.Path) -> list[dict]:
@@ -29,8 +39,12 @@ def numstat(repo: pathlib.Path) -> list[dict]:
 
 
 def create_worktree(repo: pathlib.Path, tag: str) -> pathlib.Path:
-    wt = repo / ".deepseek" / f"wt-{tag}"
-    wt.parent.mkdir(exist_ok=True)
+    # Create the worktree OUTSIDE the repo tree (a fresh temp dir), not nested under
+    # `repo/.deepseek/`. A delegated child that resolves file paths against a repo
+    # root can otherwise land edits in the real tree; keeping the worktree external
+    # removes that neighbourhood (#26). `remove_worktree` tears down the temp parent.
+    root = pathlib.Path(tempfile.mkdtemp(prefix=_WT_PREFIX))
+    wt = root / f"wt-{tag}"
     _git(repo, "worktree", "add", "-q", "--detach", str(wt), "HEAD")
     return wt
 
@@ -46,6 +60,9 @@ def write_patch(worktree: pathlib.Path, out: pathlib.Path) -> pathlib.Path:
 
 def remove_worktree(repo: pathlib.Path, worktree: pathlib.Path) -> None:
     _git(repo, "worktree", "remove", "--force", str(worktree))
+    # Also remove the external temp parent we created in create_worktree.
+    if worktree.parent.name.startswith(_WT_PREFIX):
+        shutil.rmtree(worktree.parent, ignore_errors=True)
 
 
 def restore(repo: pathlib.Path) -> None:

@@ -21,6 +21,17 @@ Releases are tagged `deepseek/v<version>`.
 
 ### Fixed
 
+- **Worktree isolation hardened (#26):** the disposable worktree is now created **outside** the
+  repo tree (a temp dir), not nested under `repo/.deepseek/`, so a child that resolves paths against
+  a repo root can't land edits in the real tree. `delegate` also snapshots the main tree before/after
+  the run and reports a new `isolation_breach` status (exit 7, nothing applied) if the child wrote
+  into it anyway. A no-op run now reports a distinct `no_changes` status (exit 0) instead of a
+  misleading `patch_ready` with an empty, unappliable patch.
+- **Cost basis (#27):** the per-run cost cap compared against the child's **Anthropic-priced**
+  `total_cost_usd`, which overstates DeepSeek spend and spuriously tripped `budget_exceeded`. Cost is
+  now computed from the child's token usage at configurable `deepseekPricing` rates when set (note
+  reads "DeepSeek-priced"); the default `maxCostUsdPerRun` was raised to `1.00` (and
+  `maxCostUsdPerSession` to `4.00`) to suit the Anthropic-priced unit when pricing isn't configured.
 - **Windows child spawn:** `run_child` now resolves `claude` via `shutil.which` (honoring
   `PATHEXT`) before spawning, so the Windows `.bat`/`.cmd` shim launches. Previously a bare
   `claude` argv[0] with `shell=False` failed with `WinError 2` on Windows — the delegate

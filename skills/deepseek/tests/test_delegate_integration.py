@@ -137,3 +137,60 @@ def test_delegate_child_is_error_treated_as_failure(git_repo, fake_claude, monke
 
     assert receipt["status"] == "error"
     assert rc == 7
+
+
+def test_delegate_no_changes_when_child_edits_nothing(git_repo, fake_claude, monkeypatch, capsys):
+    """Child produced no edits — surface `no_changes`, not a patch_ready + empty patch (#26)."""
+    monkeypatch.chdir(git_repo)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.delenv("FAKE_EDIT_FILE", raising=False)  # fake claude touches nothing
+    monkeypatch.delenv("DEEPSEEK_DELEGATE_DEPTH", raising=False)
+
+    rc = ops_delegate.cmd_delegate(_args(verify="true"))
+    receipt = json.loads(capsys.readouterr().out)
+
+    assert receipt["status"] == "no_changes"
+    assert receipt["files"] == []
+    assert "patch" not in receipt  # nothing to apply
+    assert rc == 0
+
+
+def test_delegate_detects_isolation_breach(git_repo, fake_claude, monkeypatch, capsys):
+    """A child that writes into the main tree (absolute path) instead of its worktree is
+    caught as an isolation breach, not reported as success (#26)."""
+    monkeypatch.chdir(git_repo)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    # absolute path into the *main* repo — simulates a child escaping the worktree
+    monkeypatch.setenv("FAKE_EDIT_FILE", str(git_repo / "a.py"))
+    monkeypatch.delenv("DEEPSEEK_DELEGATE_DEPTH", raising=False)
+
+    rc = ops_delegate.cmd_delegate(_args(verify="true"))
+    receipt = json.loads(capsys.readouterr().out)
+
+    assert receipt["status"] == "isolation_breach"
+    assert any(f["path"] == "a.py" for f in receipt["files"])
+    assert "patch" not in receipt
+    assert rc == 7
+
+
+def test_delegate_costs_at_deepseek_rates_when_configured(
+    git_repo, fake_claude, monkeypatch, capsys
+):
+    """With `deepseekPricing` set, the receipt's cost is computed from token usage at those
+    rates, not the child's Anthropic-priced total_cost_usd (#27)."""
+    monkeypatch.chdir(git_repo)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.setenv("FAKE_EDIT_FILE", "a.py")
+    monkeypatch.delenv("DEEPSEEK_DELEGATE_DEPTH", raising=False)
+    (git_repo / ".deepseek.json").write_text(
+        json.dumps({"deepseekPricing": {"inputPerMTok": 1.0, "outputPerMTok": 2.0}})
+    )
+
+    rc = ops_delegate.cmd_delegate(_args(verify="true"))
+    receipt = json.loads(capsys.readouterr().out)
+
+    assert receipt["status"] == "patch_ready"
+    # fake usage: 1000 in @ $1/M + 500 out @ $2/M = 0.001 + 0.001 = 0.002
+    assert abs(receipt["cost"]["reported_usd"] - 0.002) < 1e-9
+    assert "DeepSeek-priced" in receipt["cost"]["note"]
+    assert rc == 0

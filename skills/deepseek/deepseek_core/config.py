@@ -10,12 +10,21 @@ DEFAULTS = {
     "mode": "suggest",  # explicit | suggest | auto
     "model": "deepseek-v4-flash",
     "verifyDefault": "ruff check {file}",
+    # Optional DeepSeek token pricing ($ per 1M tokens). When set, per-run cost is
+    # computed from the child's token usage at these rates instead of the child's
+    # Anthropic-priced `total_cost_usd` (which overstates DeepSeek spend). Left null
+    # by default so nothing volatile is baked in — set it to your current rates.
+    "deepseekPricing": None,  # e.g. {"inputPerMTok": 0.27, "outputPerMTok": 1.10}
     "auto": {
         "allowTasks": ["docstrings", "formatting", "boilerplate", "tests", "comments", "rename"],
         "allowGlobs": ["**/*.py"],
         "denyGlobs": [".github/**", "**/*secret*", "infra/**"],
-        "maxCostUsdPerRun": 0.25,
-        "maxCostUsdPerSession": 2.00,
+        # Cap is measured against whatever unit `cost.reported_usd` is in: the
+        # Anthropic-priced figure by default (so it fails conservative), or the
+        # DeepSeek-priced figure when `deepseekPricing` is set. Default is generous
+        # enough not to spuriously trip on a normal task's Anthropic-priced cost.
+        "maxCostUsdPerRun": 1.00,
+        "maxCostUsdPerSession": 4.00,
         "isolate": True,
     },
 }
