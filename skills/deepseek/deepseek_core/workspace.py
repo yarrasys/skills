@@ -10,6 +10,10 @@ def _git(repo: pathlib.Path, *args: str) -> str:
     ).stdout
 
 
+def is_dirty(repo: pathlib.Path) -> bool:
+    return bool(_git(repo, "status", "--porcelain").strip())
+
+
 def numstat(repo: pathlib.Path) -> list[dict]:
     # Snapshot the index, stage everything (incl. untracked) to read numstat, then
     # restore the index exactly — never clobber a caller's pre-existing staged state.

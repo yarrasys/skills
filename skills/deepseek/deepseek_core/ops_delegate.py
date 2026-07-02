@@ -3,8 +3,10 @@
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
+import tempfile
 import uuid
 
 from . import config, guardrails, receipt, runner, workspace
@@ -21,11 +23,11 @@ def _emit(rc_dict: dict) -> None:
 
 def _run_verify(cmd, cwd, files):
     if not cmd:
-        return None, 0
+        return None
     expanded = cmd.replace("{file}", " ".join(files)) if files else cmd
     proc = subprocess.run(expanded, shell=True, cwd=str(cwd), capture_output=True, text=True)
     tail = "\n".join((proc.stdout + proc.stderr).strip().splitlines()[-5:])
-    return receipt.verify_result(expanded, proc.returncode, tail), proc.returncode
+    return receipt.verify_result(expanded, proc.returncode, tail)
 
 
 def cmd_delegate(args) -> int:
@@ -49,11 +51,18 @@ def cmd_delegate(args) -> int:
         not args.in_place
     )  # auto-mode isolation is enforced by the parent choosing not to pass --in-place
 
+    if args.in_place and workspace.is_dirty(repo):
+        sys.stderr.write(
+            "deepseek: --in-place requires a clean working tree (commit or stash first)\n"
+        )
+        return 7
+
     tag = uuid.uuid4().hex[:8]
     workdir = workspace.create_worktree(repo, tag) if isolate else repo
+    settings_dir = pathlib.Path(tempfile.mkdtemp(prefix="deepseek-"))
 
     try:
-        settings = runner.write_child_settings(workdir, model)
+        settings = runner.write_child_settings(settings_dir, model)
         argv = runner.build_argv(
             args.task,
             model=model,
@@ -85,7 +94,7 @@ def cmd_delegate(args) -> int:
         files = workspace.numstat(workdir)
         changed = [f["path"] for f in files]
 
-        verify, verify_rc = _run_verify(verify_cmd, workdir, changed)
+        verify = _run_verify(verify_cmd, workdir, changed)
 
         # guardrails on the resulting change set
         denied = guardrails.denied_paths(changed, cfg["auto"]["denyGlobs"])
@@ -167,6 +176,7 @@ def cmd_delegate(args) -> int:
     finally:
         if isolate and workdir.exists():
             workspace.remove_worktree(repo, workdir)
+        shutil.rmtree(settings_dir, ignore_errors=True)
 
 
 def cmd_apply(args) -> int:
@@ -175,6 +185,11 @@ def cmd_apply(args) -> int:
     if not patch.is_file():
         sys.stderr.write(f"deepseek: patch not found: {args.patch}\n")
         return 2
-    workspace.apply_patch(repo, patch)
+    try:
+        workspace.apply_patch(repo, patch)
+    except subprocess.CalledProcessError as exc:
+        stderr_tail = "\n".join((exc.stderr or "").strip().splitlines()[-5:])
+        sys.stderr.write(f"deepseek: failed to apply patch {args.patch} — {stderr_tail}\n")
+        return 7
     sys.stderr.write(f"applied {args.patch}\n")
     return 0
