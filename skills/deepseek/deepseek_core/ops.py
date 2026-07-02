@@ -17,6 +17,22 @@ def cmd_config(args) -> int:
     return 0
 
 
+def _ensure_gitignored(cwd: pathlib.Path) -> None:
+    gitignore = cwd / ".gitignore"
+    entry = ".deepseek/"
+    if gitignore.is_file():
+        contents = gitignore.read_text()
+        if entry in contents.splitlines():
+            return
+        needs_newline = bool(contents) and not contents.endswith("\n")
+        with gitignore.open("a") as f:
+            f.write(("\n" if needs_newline else "") + entry + "\n")
+        sys.stderr.write(f"appended {entry!r} to .gitignore\n")
+    else:
+        gitignore.write_text(entry + "\n")
+        sys.stderr.write(f"created .gitignore with {entry!r}\n")
+
+
 def cmd_init(args) -> int:
     dest = pathlib.Path.cwd() / config.CONFIG_NAME
     if dest.exists():
@@ -24,6 +40,7 @@ def cmd_init(args) -> int:
         return 4
     dest.write_text(json.dumps(config.DEFAULTS, indent=2) + "\n")
     sys.stderr.write(f"created {dest.name} — review and commit\n")
+    _ensure_gitignored(pathlib.Path.cwd())
     return 0
 
 

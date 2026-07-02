@@ -48,5 +48,16 @@ def remove_worktree(repo: pathlib.Path, worktree: pathlib.Path) -> None:
     _git(repo, "worktree", "remove", "--force", str(worktree))
 
 
+def restore(repo: pathlib.Path) -> None:
+    """Discard uncommitted changes in `repo` — tracked modifications and untracked files.
+
+    Used to roll back an `--in-place` delegation whose gate (verify/deny/budget) withheld
+    the result: since `--in-place` refuses a dirty tree up front, the only uncommitted state
+    at gate time is the child's own edit, so this is safe to blow away wholesale.
+    """
+    _git(repo, "checkout", "--", ".")
+    _git(repo, "clean", "-fd")
+
+
 def apply_patch(repo: pathlib.Path, patch: pathlib.Path) -> None:
     _git(repo, "apply", str(patch))

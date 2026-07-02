@@ -3,6 +3,7 @@
 import json
 import os
 import pathlib
+import shlex
 import shutil
 import subprocess
 import sys
@@ -24,7 +25,11 @@ def _emit(rc_dict: dict) -> None:
 def _run_verify(cmd, cwd, files):
     if not cmd:
         return None
-    expanded = cmd.replace("{file}", " ".join(files)) if files else cmd
+    if "{file}" in cmd and not files:
+        # No changes were made — running the verify template against a literal
+        # "{file}" would be a spurious failure, not a real signal.
+        return None
+    expanded = cmd.replace("{file}", " ".join(shlex.quote(f) for f in files)) if files else cmd
     proc = subprocess.run(expanded, shell=True, cwd=str(cwd), capture_output=True, text=True)
     tail = "\n".join((proc.stdout + proc.stderr).strip().splitlines()[-5:])
     return receipt.verify_result(expanded, proc.returncode, tail)
@@ -91,6 +96,22 @@ def cmd_delegate(args) -> int:
         result = child["result"]
         cost = {"reported_usd": result.get("total_cost_usd"), "note": COST_NOTE}
         turns = result.get("num_turns", 0)
+
+        if result.get("is_error"):
+            _emit(
+                receipt.build_receipt(
+                    status="error",
+                    workspace="worktree" if isolate else "in_place",
+                    files=[],
+                    verify=None,
+                    patch=None,
+                    cost=cost,
+                    turns=turns,
+                )
+            )
+            sys.stderr.write("deepseek: child reported is_error — no verify/apply run\n")
+            return 7
+
         files = workspace.numstat(workdir)
         changed = [f["path"] for f in files]
 
@@ -116,6 +137,8 @@ def cmd_delegate(args) -> int:
                     turns=turns,
                 )
             )
+            if not isolate:
+                workspace.restore(repo)
             return 5
         if denied:
             _emit(
@@ -130,6 +153,8 @@ def cmd_delegate(args) -> int:
                 )
             )
             sys.stderr.write(f"deepseek: change touches denied paths: {denied}\n")
+            if not isolate:
+                workspace.restore(repo)
             return 6
         if over_budget:
             _emit(
@@ -143,6 +168,8 @@ def cmd_delegate(args) -> int:
                     turns=turns,
                 )
             )
+            if not isolate:
+                workspace.restore(repo)
             return 6
 
         if isolate:

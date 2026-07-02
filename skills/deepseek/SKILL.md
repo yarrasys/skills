@@ -73,6 +73,11 @@ added **only when `status == "patch_ready"`** — every other status omits it en
 | `verify_failed` | 5 | The child's edit failed `verify` (default `ruff check {file}`, or `--verify`/`verifyDefault`). No `patch` key; nothing was applied; `receipt.verify.tail` has the last lines of output. |
 | `budget_exceeded` | 6 | Child-reported cost exceeded `auto.maxCostUsdPerRun`. No `patch` key; nothing applied. |
 | `denied` | 6 | The change touched a path matching `auto.denyGlobs`. No `patch` key; nothing applied; `receipt.files` shows what changed. |
+
+For these three withheld statuses, "nothing applied" holds in **both** modes: in worktree mode
+the edit only ever existed in the disposable worktree, which is discarded; in `--in-place` mode
+`delegate` restores the working tree to `HEAD` (`git checkout -- .` + `git clean -fd`) before
+returning, undoing the child's edit and removing anything it created.
 | `error` | 7 | The child process itself failed or produced unparseable output. No `patch` key; no receipt fields beyond the shell (`files: []`, `cost.reported_usd: null`). |
 
 Other exit codes: `2` `apply` given a patch that doesn't exist · `3` `check` failed, or `delegate`
@@ -100,6 +105,18 @@ environment `delegate` runs in. If your project doesn't use `ruff` (or it isn't 
 delegation will spuriously report `verify_failed`. Either set `verifyDefault` in `.deepseek.json`
 to a command that fits your project, or pass `--verify <cmd>` per call (use `{file}` as a
 placeholder for the changed files; an empty string via `--verify ""` disables verification).
+
+## Security — what isolation actually covers
+
+The delegated child runs with `Bash` in `ALLOWED_TOOLS` and `--permission-mode acceptEdits`
+(auto-approved, no per-tool confirmation). Worktree isolation only contains the child's
+**git-tracked file diffs** — it does **not** sandbox the child's process. From inside the
+worktree the child can still run arbitrary shell commands, write to absolute paths outside the
+worktree, read/exfiltrate repo contents over the network, or otherwise act outside git's view.
+Only delegate to a DeepSeek endpoint/key you trust with shell access. `--in-place` skips even
+that file-diff isolation and lets the child's edits land straight on your real tree (rolled back
+automatically if a gate withholds — see the receipt table above), so treat it as running
+untrusted edits directly on your working copy.
 
 ## Security — the key is never yours to see
 

@@ -1,5 +1,6 @@
 import importlib
 import json
+import subprocess
 import types
 
 ops_delegate = importlib.import_module("deepseek_core.ops_delegate")
@@ -96,3 +97,43 @@ def test_delegate_in_place_refuses_dirty_tree(git_repo, monkeypatch, capsys):
     assert captured.out == ""  # no receipt emitted — refused before spawning the child
     # untouched by any delegate/fake-claude activity — still just the dirty edit we made
     assert (git_repo / "a.py").read_text() == "x = 2\n"
+
+
+def test_delegate_in_place_verify_failure_rolls_back(git_repo, fake_claude, monkeypatch, capsys):
+    """A withheld (`verify_failed`) --in-place gate must not leave the child's edit on
+    the real tree — SKILL.md promises 'nothing applied' for this status in every mode."""
+    monkeypatch.chdir(git_repo)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.setenv("FAKE_EDIT_FILE", "a.py")
+    monkeypatch.delenv("DEEPSEEK_DELEGATE_DEPTH", raising=False)
+    original = (git_repo / "a.py").read_text()
+
+    rc = ops_delegate.cmd_delegate(_args(in_place=True, verify="false"))  # `false` always fails
+    receipt = json.loads(capsys.readouterr().out)
+
+    assert receipt["status"] == "verify_failed"
+    assert rc == 5
+    assert (git_repo / "a.py").read_text() == original  # rolled back
+    status = subprocess.run(
+        ["git", "-C", str(git_repo), "status", "--porcelain"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert status == ""  # no leftover untracked/modified files
+
+
+def test_delegate_child_is_error_treated_as_failure(git_repo, fake_claude, monkeypatch, capsys):
+    """A real `claude` child can exit 0 while still reporting `is_error: true` in its JSON —
+    that must be treated as a failed delegation, not run through verify/apply."""
+    monkeypatch.chdir(git_repo)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.setenv("FAKE_EDIT_FILE", "a.py")
+    monkeypatch.setenv("FAKE_IS_ERROR", "1")
+    monkeypatch.delenv("DEEPSEEK_DELEGATE_DEPTH", raising=False)
+
+    rc = ops_delegate.cmd_delegate(_args(verify="true"))
+    receipt = json.loads(capsys.readouterr().out)
+
+    assert receipt["status"] == "error"
+    assert rc == 7
