@@ -1,4 +1,4 @@
-""".deepseek.json` discovery, defaults, and merge."""
+"""`.deepseek.json` discovery, defaults, and merge."""
 
 import copy
 import json

@@ -27,12 +27,14 @@ def test_load_defaults_when_absent(tmp_path):
 
 
 def test_load_merges_over_defaults(tmp_path):
-    _write(tmp_path / ".deepseek.json", {"model": "deepseek-v4-pro", "auto": {"maxCostUsdPerRun": 0.5}})
+    _write(
+        tmp_path / ".deepseek.json", {"model": "deepseek-v4-pro", "auto": {"maxCostUsdPerRun": 0.5}}
+    )
     cfg = config.load_config(tmp_path)
-    assert cfg["model"] == "deepseek-v4-pro"          # overridden
-    assert cfg["mode"] == "suggest"                    # default preserved
-    assert cfg["auto"]["maxCostUsdPerRun"] == 0.5      # nested override
-    assert "docstrings" in cfg["auto"]["allowTasks"]   # nested default preserved
+    assert cfg["model"] == "deepseek-v4-pro"  # overridden
+    assert cfg["mode"] == "suggest"  # default preserved
+    assert cfg["auto"]["maxCostUsdPerRun"] == 0.5  # nested override
+    assert "docstrings" in cfg["auto"]["allowTasks"]  # nested default preserved
 
 
 def test_auto_mode_forces_isolate(tmp_path):
