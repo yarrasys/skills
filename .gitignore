@@ -23,6 +23,9 @@ venv/
 # ── Skill working directories ────────────────────────────────────────
 .deepseek/
 
+# ── Generated knowledge graph (graphify) — regenerable, kept local ─────
+graphify-out/
+
 # ── OS / editor ────────────────────────────────────────────────────────
 .DS_Store
 *.swp
